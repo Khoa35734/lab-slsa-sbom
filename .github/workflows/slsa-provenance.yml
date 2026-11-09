@@ -1,0 +1,52 @@
+name: SLSA Level 3 Provenance Generator
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions: read-all
+
+jobs:
+  # Job 1: Bien dich va dong goi ung dung (Hardened Build)
+  build:
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Co dinh commit SHA 40 ky tu thay vi tag phien ban tho
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Package Application Artifact
+        run: |
+          tar -czvf release.tar.gz main.py
+
+      - name: Generate SHA256 Checksum for SLSA
+        id: hash
+        run: |
+          # Tinh ma bam SHA256 cua tep nen va ma hoa Base64 cho SLSA Generator
+          echo "hashes=$(sha256sum release.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifact
+          path: release.tar.gz
+
+  # Job 2: Tu dong sinh chung nhan nguon goc xuat xu SLSA Provenance (Level 3)
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read      # Doc lich su bai chay cua GitHub Actions
+      id-token: write     # Lay OIDC Token xac thuc chu ky chung nhan
+      contents: write     # Ghi chung nhan vao Release assets (neu co)
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true

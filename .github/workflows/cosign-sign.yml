@@ -1,0 +1,57 @@
+name: Keyless Artifact Signing with Cosign
+
+on:
+  push:
+    tags:
+      - 'v*' # Kich hoat khi day Git Tag dang v1.0.0, v2.0.0...
+  workflow_dispatch: # Cho phep bam nut chay thu cong tu giao dien Web
+
+permissions:
+  contents: read
+  id-token: write # Bat buoc: Cho phep runner lay OIDC Token xac thuc voi Sigstore Fulcio
+
+jobs:
+  build-and-sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Package Release Artifact
+        run: |
+          tar -czvf release.tar.gz app.py
+          sha256sum release.tar.gz > release.tar.gz.sha256
+          echo "Da dong goi tep release.tar.gz thanh cong."
+
+      - name: Install Sigstore Cosign
+        uses: sigstore/cosign-installer@v4
+
+      - name: Sign Artifact Keylessly
+        env:
+          COSIGN_EXPERIMENTAL: "1" # Bat che do Keyless Sigstore
+        run: |
+          cosign sign-blob \
+            --yes \
+            --output-signature release.tar.gz.sig \
+            --output-certificate release.tar.gz.pem \
+            release.tar.gz
+          echo "Ky so Keyless thanh cong! Chung chi Fulcio va chu ky da duoc tao."
+
+      - name: Verify Signed Artifact
+        run: |
+          cosign verify-blob \
+            --certificate release.tar.gz.pem \
+            --signature release.tar.gz.sig \
+            --certificate-identity "https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/.github/workflows/cosign-sign.yml@${{ github.ref }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            release.tar.gz
+
+      - name: Upload Signed Artifacts Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-signed-package
+          path: |
+            release.tar.gz
+            release.tar.gz.sig
+            release.tar.gz.pem
+            release.tar.gz.sha256
