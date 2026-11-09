@@ -1,0 +1,9 @@
+# Downloaded artifacts and temp files
+artifacts_downloaded/
+*.intoto.jsonl
+*.tar.gz
+*.sig
+*.pem
+*.sha256
+*.pyc
+__pycache__/
